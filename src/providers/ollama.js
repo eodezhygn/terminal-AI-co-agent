@@ -50,17 +50,41 @@ function parseOllamaList(stdout) {
  * @returns {boolean}
  */
 export function isOllamaAvailable() {
-  try {
-    const result = spawnSync('ollama', ['version'], {
-      stdio: ['ignore', 'ignore', 'ignore'],
-      timeout: 5000,
-      encoding: 'utf8'
-    });
+  const checks = [
+    ['--version'],
+    ['version']
+  ];
 
-    return result.status === 0;
-  } catch (error) {
-    return false;
+  for (const args of checks) {
+    try {
+      const result = spawnSync('ollama', args, {
+        stdio: ['ignore', 'ignore', 'ignore'],
+        timeout: 5000,
+        encoding: 'utf8'
+      });
+
+      if (result.error) {
+        if (result.error.code === 'ENOENT') {
+          // Ollama CLI is not installed at all.
+          return false;
+        }
+
+        // The command form may not be supported by this Ollama version;
+        // continue and try the next compatibility form.
+        continue;
+      }
+
+      if (result.status === 0) {
+        return true;
+      }
+    } catch (error) {
+      if (error?.code === 'ENOENT') {
+        return false;
+      }
+    }
   }
+
+  return false;
 }
 
 /**
@@ -81,6 +105,7 @@ export async function listModels() {
       return parseOllamaList(result.stdout);
     }
 
+    // Ollama versions without --json support still expose a plain text list.
     const fallback = spawnSync('ollama', ['list'], {
       stdio: ['ignore', 'pipe', 'pipe'],
       encoding: 'utf8',

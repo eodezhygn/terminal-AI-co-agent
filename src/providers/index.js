@@ -1,11 +1,13 @@
 import openaiProvider from './openai.js';
 import openrouterProvider from './openrouter.js';
 import geminiProvider from './gemini.js';
+import ollamaProvider from './ollama.js';
 
 const providers = {
   openai: openaiProvider,
   openrouter: openrouterProvider,
-  gemini: geminiProvider
+  gemini: geminiProvider,
+  ollama: ollamaProvider
 };
 
 const taskRoutes = [

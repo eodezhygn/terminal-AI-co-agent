@@ -1,13 +1,19 @@
+import { listModels } from './providers/ollama.js';
+
 /**
- * Lightweight local model router — deterministic, pure functions.
+ * Lightweight local model router and local model detection helpers.
  *
  * Exports:
  * - getModelForRole(role)
  * - getRoleForIntent(intent)
+ * - getAvailableLocalModels()
+ * - getPlannerModel()
+ * - getCoderModel()
+ * - getLocalModelAssignments()
  *
  * Notes:
  * - ESM module
- * - No external calls or integrations
+ * - Uses Ollama local model listing for detection
  * - Normalizes input with trim()+toLowerCase()
  */
 
@@ -16,6 +22,27 @@ const ROLE_MODEL_MAP = {
   planner: 'qwen2.5:0.5b',
   coder: 'qwen2.5-coder:1.5b',
 };
+
+const PREFERRED_PLANNER_MODELS = ['qwen2.5:0.5b'];
+const PREFERRED_CODER_MODELS = ['coder'];
+
+function selectPreferredModel(models, preferences) {
+  if (!Array.isArray(models) || models.length === 0) {
+    return '';
+  }
+
+  const normalized = models.map((model) => String(model ?? '').trim());
+  for (const preference of preferences) {
+    const match = normalized.find((name) =>
+      name.toLowerCase().includes(preference.toLowerCase())
+    );
+    if (match) {
+      return match;
+    }
+  }
+
+  return normalized[0];
+}
 
 /** @type {Record<string, 'planner' | 'coder'>} */
 const INTENT_ROLE_MAP = {
@@ -36,6 +63,54 @@ export function getModelForRole(role) {
   return (
     ROLE_MODEL_MAP[normalizedRole] || process.env.DEFAULT_MODEL || 'gemini'
   );
+}
+
+/**
+ * Attempt to list installed local Ollama models.
+ *
+ * @returns {Promise<string[]>}
+ */
+export async function getAvailableLocalModels() {
+  try {
+    const models = await listModels();
+    return Array.isArray(models) ? models.map((m) => String(m ?? '').trim()).filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Resolve the best local model for planner duties.
+ *
+ * @param {string[]} availableModels
+ * @returns {string}
+ */
+export function getPlannerModel(availableModels) {
+  return selectPreferredModel(availableModels, PREFERRED_PLANNER_MODELS);
+}
+
+/**
+ * Resolve the best local model for coder duties.
+ *
+ * @param {string[]} availableModels
+ * @returns {string}
+ */
+export function getCoderModel(availableModels) {
+  return selectPreferredModel(availableModels, PREFERRED_CODER_MODELS);
+}
+
+/**
+ * Resolve the local model assignments for planner/coder.
+ *
+ * @returns {Promise<{plannerModel:string,coderModel:string,availableModels:string[]}>}
+ */
+export async function getLocalModelAssignments() {
+  const availableModels = await getAvailableLocalModels();
+  return {
+    plannerModel: getPlannerModel(availableModels),
+    coderModel: getCoderModel(availableModels),
+    availableModels
+  };
 }
 
 /**

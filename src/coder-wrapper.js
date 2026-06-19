@@ -1,25 +1,67 @@
-import { getModelForRole } from './local-model-router.js';
+import { getLocalModelAssignments, getModelForRole } from './local-model-router.js';
+import { generateCompletion } from './providers/ollama.js';
 
 /**
- * Runs the coder model with deterministic metadata-only response (stub)
+ * Runs the coder model with local Ollama generation
  * @param {Object} config - Configuration object
  * @param {string} config.role - Model role (default: 'coder')
  * @param {Object} config.reducedContext - Reduced context for the task
- * @returns {Object} Metadata-only response with stub status
+ * @returns {Object}
  */
 export async function runCoder({ role = 'coder', reducedContext }) {
-  // Select model using getModelForRole
-  const selectedModel = getModelForRole(role);
+  const { coderModel } = await getLocalModelAssignments();
+  const selectedModel = coderModel || getModelForRole(role);
 
-  // Build metadata-only response (no AI generation)
-  const response = {
+  const taskText =
+    typeof reducedContext?.task === 'string'
+      ? reducedContext.task
+      : typeof reducedContext?.payload === 'string'
+      ? reducedContext.payload
+      : null;
+
+  const prompt = [
+    'You are a local code generation assistant.',
+    `Role: ${role}`,
+    taskText ? `Task: ${taskText}` : 'Task: <unspecified>',
+    '',
+    'Reduced task context:',
+    JSON.stringify(reducedContext || {}, null, 2),
+    '',
+    'Generate the code needed to complete the task and return only the generated code.'
+  ].join('\n');
+
+  if (!selectedModel) {
+    return {
+      role,
+      selectedModel: null,
+      task: taskText,
+      contextSize: reducedContext ? Object.keys(reducedContext).length : 0,
+      status: 'error',
+      generatedCode: null,
+      error: 'No local coder model available.'
+    };
+  }
+
+  const result = await generateCompletion({ model: selectedModel, prompt });
+
+  if (!result.success) {
+    return {
+      role,
+      selectedModel,
+      task: taskText,
+      contextSize: reducedContext ? Object.keys(reducedContext).length : 0,
+      status: 'error',
+      generatedCode: null,
+      error: result.error || 'Ollama generation failed.'
+    };
+  }
+
+  return {
     role,
     selectedModel,
-    task: reducedContext?.task || null,
+    task: taskText,
     contextSize: reducedContext ? Object.keys(reducedContext).length : 0,
-    status: 'stub',
-    generatedCode: null
+    status: 'success',
+    generatedCode: result.output
   };
-
-  return response;
 }

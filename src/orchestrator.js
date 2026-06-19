@@ -2,6 +2,7 @@ import { Planner } from './planner.js';
 import { extractProjectContext } from './context-extractor.js';
 import { reduceTaskContext } from './task-reducer.js';
 import { runCoder } from './coder-wrapper.js';
+import { validateGeneratedCode } from './validator.js';
 import { getRoleForIntent } from './local-model-router.js';
 
 /**
@@ -39,7 +40,8 @@ export async function orchestrate({ taskDescription, projectRoot = process.cwd()
 
   // 5) Run coder wrapper (deterministic stub)
   const coderResult = await runCoder({ role, reducedContext });
-  const status = coderResult?.status === 'success' ? 'success' : 'error';
+  const validation = validateGeneratedCode(coderResult);
+  const status = coderResult?.status === 'success' && validation.valid ? 'success' : 'error';
 
   // 6) Return deterministic orchestration result (nested as requested)
   return {
@@ -49,6 +51,7 @@ export async function orchestrate({ taskDescription, projectRoot = process.cwd()
     },
     reducedTask: reducedContext,
     coder: coderResult,
+    validation,
     generatedCode: coderResult?.generatedCode ?? null,
     status,
     task: taskDescription,

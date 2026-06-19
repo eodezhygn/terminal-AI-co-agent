@@ -39,9 +39,18 @@ export async function orchestrate({ taskDescription, projectRoot = process.cwd()
 
   // 5) Run coder wrapper (deterministic stub)
   const coderResult = await runCoder({ role, reducedContext });
+  const status = coderResult?.status === 'success' ? 'success' : 'error';
 
   // 6) Return deterministic orchestration result (nested as requested)
   return {
+    planner: {
+      intent: { name: intent, confidence },
+      role
+    },
+    reducedTask: reducedContext,
+    coder: coderResult,
+    generatedCode: coderResult?.generatedCode ?? null,
+    status,
     task: taskDescription,
     intent: {
       name: intent,

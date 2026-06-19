@@ -1,3 +1,6 @@
+import { getLocalModelAssignments } from './local-model-router.js';
+import { generateCompletion } from './providers/ollama.js';
+
 export class Planner {
   constructor({ agents = [] } = {}) {
     this.agents = agents;
@@ -421,4 +424,45 @@ export class Planner {
       assignedAgent: this.agents[index % this.agents.length]?.name ?? 'unassigned'
     }));
   }
+}
+
+export async function runLocalPlanner(taskDescription) {
+  if (typeof taskDescription !== 'string' || !taskDescription.trim()) {
+    return {
+      status: 'error',
+      plannerModel: '',
+      error: 'taskDescription must be a non-empty string.'
+    };
+  }
+
+  const { plannerModel } = await getLocalModelAssignments();
+  if (!plannerModel) {
+    return {
+      status: 'error',
+      plannerModel: '',
+      error: 'No local planner model available.'
+    };
+  }
+
+  const prompt = `You are a planner assistant.
+Create a short execution plan for the task below.
+Respond only with a brief plan; do not include extra commentary.
+
+Task: ${taskDescription.trim()}`;
+
+  const result = await generateCompletion({ model: plannerModel, prompt });
+
+  if (!result.success) {
+    return {
+      status: 'error',
+      plannerModel,
+      error: result.error || 'Planner generation failed.'
+    };
+  }
+
+  return {
+    status: 'success',
+    plannerModel,
+    rawPlan: String(result.output || '').trim()
+  };
 }

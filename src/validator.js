@@ -40,6 +40,51 @@ export function validateFileWrite({ path: filePath, content, projectContext = {}
  * @param {any} result.generatedCode
  * @returns {{ valid: boolean, issues: string[] }}
  */
+const VALID_ACTION_TYPES = new Set([
+  'create_file',
+  'edit_file',
+  'append_file',
+  'create_folder',
+  'read_file'
+]);
+
+function validateAction(action, index) {
+  const issues = [];
+
+  if (!action || typeof action !== 'object') {
+    issues.push(`Action[${index}] must be an object.`);
+    return issues;
+  }
+
+  if (typeof action.type !== 'string' || !VALID_ACTION_TYPES.has(action.type.trim())) {
+    issues.push(`Action[${index}].type must be one of ${[...VALID_ACTION_TYPES].join(', ')}.`);
+  }
+
+  if (typeof action.path !== 'string' || !action.path.trim()) {
+    issues.push(`Action[${index}].path must be a non-empty string.`);
+  }
+
+  return issues;
+}
+
+export function validateActions(actions) {
+  const issues = [];
+
+  if (!Array.isArray(actions)) {
+    return { valid: false, issues: ['actions must be an array.'] };
+  }
+
+  if (actions.length === 0) {
+    return { valid: false, issues: ['actions must contain at least one action.'] };
+  }
+
+  actions.forEach((action, index) => {
+    issues.push(...validateAction(action, index));
+  });
+
+  return { valid: issues.length === 0, issues };
+}
+
 export function validateGeneratedCode(result) {
   const issues = [];
 
@@ -51,34 +96,53 @@ export function validateGeneratedCode(result) {
     issues.push('status must equal "success".');
   }
 
-  if (result.generatedCode === undefined || result.generatedCode === null) {
-    issues.push('generatedCode must exist.');
-  }
+  let hasValidGeneratedCode = false;
+  let generatedCodeIssues = [];
 
-  if (typeof result.generatedCode !== 'string') {
-    issues.push('generatedCode must be a string.');
-  }
+  if (result.generatedCode !== undefined && result.generatedCode !== null) {
+    if (typeof result.generatedCode !== 'string') {
+      generatedCodeIssues.push('generatedCode must be a string.');
+    } else {
+      const trimmed = result.generatedCode.trim();
 
-  if (typeof result.generatedCode === 'string') {
-    const trimmed = result.generatedCode.trim();
-
-    if (!trimmed) {
-      issues.push('generatedCode.trim() must not be empty.');
-    }
-
-    if (result.generatedCode.length <= 20) {
-      issues.push('generatedCode length must be greater than 20 characters.');
-    }
-
-    const normalized = trimmed.toLowerCase();
-    const prohibited = ['as an ai', 'i cannot', "i'm unable"];
-
-    prohibited.forEach((phrase) => {
-      if (normalized.includes(phrase)) {
-        issues.push(`generatedCode must not contain "${phrase}".`);
+      if (!trimmed) {
+        generatedCodeIssues.push('generatedCode.trim() must not be empty.');
       }
-    });
+
+      if (result.generatedCode.length <= 20) {
+        generatedCodeIssues.push('generatedCode length must be greater than 20 characters.');
+      }
+
+      const normalized = trimmed.toLowerCase();
+      const prohibited = ['as an ai', 'i cannot', "i'm unable"];
+
+      prohibited.forEach((phrase) => {
+        if (normalized.includes(phrase)) {
+          generatedCodeIssues.push(`generatedCode must not contain "${phrase}".`);
+        }
+      });
+
+      if (generatedCodeIssues.length === 0) {
+        hasValidGeneratedCode = true;
+      }
+    }
   }
 
-  return { valid: issues.length === 0, issues };
+  const actions = Array.isArray(result.actions) ? result.actions : [];
+  const actionValidation = actions.length > 0 ? validateActions(actions) : { valid: false, issues: ['actions must contain at least one action.'] };
+  const hasValidActions = actionValidation.valid;
+
+  if (!hasValidGeneratedCode && !hasValidActions) {
+    issues.push('At least one of generatedCode or actions must be present and valid.');
+  }
+
+  if (!hasValidGeneratedCode && generatedCodeIssues.length > 0) {
+    issues.push(...generatedCodeIssues);
+  }
+
+  if (!hasValidGeneratedCode && !hasValidActions && actionValidation.issues.length > 0) {
+    issues.push(...actionValidation.issues);
+  }
+
+  return { valid: hasValidGeneratedCode || hasValidActions, issues };
 }

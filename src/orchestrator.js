@@ -43,7 +43,7 @@ function extractActions(coderResult) {
  * @param {string} [params.projectRoot=process.cwd()]
  * @returns {Object} deterministic orchestration result
  */
-export async function orchestrate({ taskDescription, projectRoot = process.cwd() } = {}) {
+export async function orchestrate({ taskDescription, projectRoot = process.cwd(), runCoderFn = runCoder } = {}) {
   if (typeof taskDescription !== 'string') {
     throw new TypeError('taskDescription must be a string');
   }
@@ -70,7 +70,7 @@ export async function orchestrate({ taskDescription, projectRoot = process.cwd()
   const role = getRoleForIntent(intent);
 
   // 5) Run coder wrapper (deterministic stub)
-  const coderResult = await runCoder({ role, reducedContext });
+  const coderResult = await runCoderFn({ role, reducedContext });
   const validation = validateGeneratedCode(coderResult);
   const status = coderResult?.status === 'success' && validation.valid ? 'success' : 'error';
   const actions = extractActions(coderResult);

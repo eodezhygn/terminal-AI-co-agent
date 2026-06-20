@@ -37,4 +37,17 @@ describe('Coder wrapper and generated code validation', () => {
     assert.strictEqual(validation.valid, true);
     assert.strictEqual(validation.issues.length, 0);
   });
+
+  it('should extract actions from fenced JSON output and preserve generatedCode fallback', () => {
+    const output = 'Please complete the task:\n```json\n{\n  "actions": [\n    {"type": "create_file", "path": "example.txt", "content": "Hello world"}\n  ],\n  "generatedCode": "console.log(\\"hi\\");"\n}\n```\nThank you.';
+    const actions = extractActionsFromOutput(output);
+
+    assert.deepStrictEqual(actions, [
+      {
+        type: 'create_file',
+        path: 'example.txt',
+        content: 'Hello world'
+      }
+    ]);
+  });
 });

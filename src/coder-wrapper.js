@@ -9,33 +9,88 @@ const VALID_ACTION_TYPES = new Set([
   'read_file'
 ]);
 
+function extractBalancedJson(text, start) {
+  const opening = text[start];
+  const closing = opening === '{' ? '}' : ']';
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+
+  for (let index = start; index < text.length; index += 1) {
+    const char = text[index];
+
+    if (inString) {
+      if (escape) {
+        escape = false;
+        continue;
+      }
+      if (char === '\\') {
+        escape = true;
+        continue;
+      }
+      if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+      continue;
+    }
+
+    if (char === opening) {
+      depth += 1;
+      continue;
+    }
+
+    if (char === closing) {
+      depth -= 1;
+      if (depth === 0) {
+        return text.slice(start, index + 1);
+      }
+    }
+  }
+
+  return null;
+}
+
 function tryParseJsonCandidate(text) {
   if (typeof text !== 'string' || !text.trim()) {
     return null;
   }
 
-  const trimmed = text.trim();
-  const firstBrace = trimmed.indexOf('{');
-  const firstBracket = trimmed.indexOf('[');
-  const startCandidates = [firstBrace, firstBracket].filter((index) => index >= 0);
-  if (startCandidates.length === 0) {
-    return null;
+  const candidates = [];
+  const fencedRegex = /```(?:json)?\s*([\s\S]*?)\s*```/gi;
+  let match;
+
+  while ((match = fencedRegex.exec(text)) !== null) {
+    candidates.push(match[1].trim());
   }
 
-  const start = Math.min(...startCandidates);
-  const lastBrace = trimmed.lastIndexOf('}');
-  const lastBracket = trimmed.lastIndexOf(']');
-  const end = Math.max(lastBrace, lastBracket);
-  if (end <= start) {
-    return null;
+  if (candidates.length === 0) {
+    const trimmed = text.trim();
+    for (let index = 0; index < trimmed.length; index += 1) {
+      const char = trimmed[index];
+      if (char === '{' || char === '[') {
+        const candidate = extractBalancedJson(trimmed, index);
+        if (candidate) {
+          candidates.push(candidate);
+          break;
+        }
+      }
+    }
   }
 
-  const candidate = trimmed.slice(start, end + 1);
-  try {
-    return JSON.parse(candidate);
-  } catch {
-    return null;
+  for (const candidate of candidates) {
+    try {
+      return JSON.parse(candidate);
+    } catch {
+      continue;
+    }
   }
+
+  return null;
 }
 
 function normalizeAction(action) {
@@ -118,7 +173,12 @@ export async function runCoder({ role = 'coder', reducedContext }) {
     'Reduced task context:',
     JSON.stringify(reducedContext || {}, null, 2),
     '',
-    'Generate the code needed to complete the task and return only the generated code.'
+    'Return a JSON object whenever possible.',
+    'The JSON object must contain an actions array using only supported executor types:',
+    '  create_folder, create_file, edit_file, append_file, read_file',
+    'Each action must contain type and path. Include content when file content is available.',
+    'If the task cannot be fully expressed as actions, return the generated code as a string in generatedCode.',
+    'If both actions and generatedCode are available, return them together in the JSON object.'
   ].join('\n');
 
   if (!selectedModel) {
@@ -149,13 +209,18 @@ export async function runCoder({ role = 'coder', reducedContext }) {
   }
 
   const output = String(result.stdout || result.output || '').trim();
+  const parsed = tryParseJsonCandidate(output);
+  const generatedCode = parsed && typeof parsed.generatedCode === 'string'
+    ? parsed.generatedCode.trim()
+    : output;
+
   return {
     role,
     selectedModel,
     task: taskText,
     contextSize: reducedContext ? Object.keys(reducedContext).length : 0,
     status: 'success',
-    generatedCode: output,
+    generatedCode,
     actions: extractActionsFromOutput(output)
   };
 }

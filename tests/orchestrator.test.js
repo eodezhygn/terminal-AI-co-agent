@@ -36,4 +36,46 @@ describe('Deterministic Orchestrator Pipeline', () => {
     assert.strictEqual(result.intent.name, 'filesystem', 'Intent should be filesystem');
     assert.strictEqual(result.intent.role.name, 'planner', 'Role should be planner for filesystem intent');
   });
+
+  it('should prefer AI-generated actions when provided', async () => {
+    const result = await orchestrate({
+      taskDescription: 'Create example file',
+      projectRoot,
+      runCoderFn: async () => ({
+        role: 'coder',
+        selectedModel: 'qwen2.5-coder:1.5b',
+        task: 'Create example file',
+        contextSize: 0,
+        status: 'success',
+        generatedCode: 'console.log("hi");',
+        actions: [
+          { type: 'create_file', path: 'example.txt', content: 'hi' }
+        ]
+      })
+    });
+
+    assert.strictEqual(result.coder.actions.length, 1, 'Should preserve AI-generated actions');
+    assert.strictEqual(result.actions.length, 1, 'Orchestrator should prefer AI actions');
+    assert.strictEqual(result.actions[0].path, 'example.txt');
+  });
+
+  it('should fall back to generatedCode when actions are absent', async () => {
+    const result = await orchestrate({
+      taskDescription: 'Write fallback file',
+      projectRoot,
+      runCoderFn: async () => ({
+        role: 'coder',
+        selectedModel: 'qwen2.5-coder:1.5b',
+        task: 'Write fallback file',
+        contextSize: 0,
+        status: 'success',
+        generatedCode: 'console.log("fallback");',
+        actions: []
+      })
+    });
+
+    assert.strictEqual(result.actions.length, 1, 'Fallback should produce one create_file action');
+    assert.strictEqual(result.actions[0].path, 'generated_code.txt');
+    assert.strictEqual(result.generatedCode, 'console.log("fallback");');
+  });
 });

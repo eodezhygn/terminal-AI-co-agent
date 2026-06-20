@@ -93,6 +93,56 @@ function tryParseJsonCandidate(text) {
   return null;
 }
 
+function tryParseActionsArray(text) {
+  if (typeof text !== 'string' || !text.trim()) {
+    return null;
+  }
+
+  const fencedRegex = /```(?:json)?\s*([\s\S]*?)\s*```/gi;
+  let match;
+  const candidates = [];
+
+  while ((match = fencedRegex.exec(text)) !== null) {
+    candidates.push(match[1].trim());
+  }
+
+  if (candidates.length === 0) {
+    candidates.push(text);
+  }
+
+  for (const candidate of candidates) {
+    const actionsKey = /"actions"\s*:\s*/i.exec(candidate);
+    if (!actionsKey) {
+      continue;
+    }
+
+    let index = actionsKey.index + actionsKey[0].length;
+    while (index < candidate.length && /\s/.test(candidate[index])) {
+      index += 1;
+    }
+
+    if (candidate[index] !== '[') {
+      continue;
+    }
+
+    const arrayText = extractBalancedJson(candidate, index);
+    if (!arrayText) {
+      continue;
+    }
+
+    try {
+      const parsedArray = JSON.parse(arrayText);
+      if (Array.isArray(parsedArray)) {
+        return parsedArray;
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
+}
+
 function normalizeAction(action) {
   if (!action || typeof action !== 'object') {
     return null;
@@ -141,6 +191,13 @@ export function extractActionsFromOutput(output) {
       candidates.push(...parsed.actions);
     } else {
       candidates.push(parsed);
+    }
+  }
+
+  if (candidates.length === 0) {
+    const actions = tryParseActionsArray(output);
+    if (Array.isArray(actions)) {
+      candidates.push(...actions);
     }
   }
 

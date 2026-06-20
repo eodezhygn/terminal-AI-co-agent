@@ -50,4 +50,17 @@ describe('Coder wrapper and generated code validation', () => {
       }
     ]);
   });
+
+  it('should extract actions when generatedCode is malformed JavaScript template literal inside fenced JSON', () => {
+    const output = 'Some output text\n```json\n{\n  "actions": [\n    {\n      "type": "create_folder",\n      "path": "src/agents"\n    }\n  ],\n  "generatedCode": `...`\n}\n```\n';
+
+    const actions = extractActionsFromOutput(output);
+    assert.strictEqual(actions.length > 0, true);
+    assert.deepStrictEqual(actions, [
+      {
+        type: 'create_folder',
+        path: 'src/agents'
+      }
+    ]);
+  });
 });

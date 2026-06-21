@@ -5,6 +5,7 @@ import { runCoder } from './coder-wrapper.js';
 import { validateActions, validateGeneratedCode } from './validator.js';
 import { getRoleForIntent } from './local-model-router.js';
 import { executePlan } from './executor.js';
+import { validateActionSafety } from './action-safety.js';
 
 const FALLBACK_FILE_NAME = 'generated_code.txt';
 
@@ -49,10 +50,14 @@ export async function orchestrate({
   projectRoot = process.cwd(),
   runCoderFn = runCoder,
   executeActions = false,
+  dryRun = false,
   executorFn = executePlan
 } = {}) {
   if (typeof taskDescription !== 'string') {
     throw new TypeError('taskDescription must be a string');
+  }
+  if (typeof dryRun !== 'boolean') {
+    throw new TypeError('dryRun must be a boolean');
   }
 
   // 1) Classify intent using Planner
@@ -84,14 +89,41 @@ export async function orchestrate({
   const actionValidation = validateActions(actions);
   const fallbackActions = buildFallbackActions(coderResult?.generatedCode);
   const effectiveActions = actionValidation.valid ? actions : fallbackActions;
+  const safetyValidation = validateActionSafety(effectiveActions, { projectRoot });
 
   let execution;
-  if (executeActions && validation.valid && actionValidation.valid) {
-    const executionResult = await executorFn(effectiveActions, projectContext);
+
+  if (dryRun) {
+    const issues = [];
+    if (!validation.valid) {
+      issues.push(...validation.issues);
+    }
+    if (!actionValidation.valid) {
+      issues.push(...actionValidation.issues);
+    }
+    if (!safetyValidation.valid) {
+      issues.push(...safetyValidation.issues);
+    }
+
     execution = {
-      success: Array.isArray(executionResult.failed) ? executionResult.failed.length === 0 : true,
-      results: executionResult
+      success: validation.valid && actionValidation.valid && safetyValidation.valid,
+      mode: 'dry-run',
+      actions: effectiveActions,
+      issues
     };
+  } else if (executeActions && validation.valid && actionValidation.valid) {
+    if (!safetyValidation.valid) {
+      execution = {
+        success: false,
+        issues: safetyValidation.issues
+      };
+    } else {
+      const executionResult = await executorFn(effectiveActions, projectContext);
+      execution = {
+        success: Array.isArray(executionResult.failed) ? executionResult.failed.length === 0 : true,
+        results: executionResult
+      };
+    }
   }
 
   // 6) Return deterministic orchestration result (nested as requested)

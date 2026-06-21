@@ -163,4 +163,67 @@ describe('Deterministic Orchestrator Pipeline', () => {
     assert.strictEqual(executorCalled, false, 'Executor should not be called when actions are invalid');
     assert.strictEqual(result.execution, undefined, 'Execution result should not be present for invalid actions');
   });
+
+  it('should return dry-run preview without calling executor', async () => {
+    let executorCalled = false;
+
+    const result = await orchestrate({
+      taskDescription: 'Create example file',
+      projectRoot,
+      executeActions: true,
+      dryRun: true,
+      runCoderFn: async () => ({
+        role: 'coder',
+        selectedModel: 'qwen2.5-coder:1.5b',
+        task: 'Create example file',
+        contextSize: 0,
+        status: 'success',
+        generatedCode: 'console.log("hi");',
+        actions: [
+          { type: 'create_file', path: 'example.txt', content: 'hi' }
+        ]
+      }),
+      executorFn: async () => {
+        executorCalled = true;
+        return { createdFiles: ['example.txt'], failed: [] };
+      }
+    });
+
+    assert.strictEqual(executorCalled, false, 'Executor should not be called in dry run mode');
+    assert.strictEqual(result.execution?.mode, 'dry-run', 'Execution mode should be dry-run');
+    assert.strictEqual(result.execution?.success, true, 'Dry run should succeed for safe actions');
+    assert.deepStrictEqual(result.execution?.actions, [
+      { type: 'create_file', path: 'example.txt', content: 'hi' }
+    ]);
+  });
+
+  it('should block unsafe action paths during execution', async () => {
+    let executorCalled = false;
+
+    const result = await orchestrate({
+      taskDescription: 'Create secret file',
+      projectRoot,
+      executeActions: true,
+      runCoderFn: async () => ({
+        role: 'coder',
+        selectedModel: 'qwen2.5-coder:1.5b',
+        task: 'Create secret file',
+        contextSize: 0,
+        status: 'success',
+        generatedCode: 'console.log("secret");',
+        actions: [
+          { type: 'create_file', path: '../secret.txt', content: 'top secret' }
+        ]
+      }),
+      executorFn: async () => {
+        executorCalled = true;
+        return { createdFiles: ['../secret.txt'], failed: [] };
+      }
+    });
+
+    assert.strictEqual(executorCalled, false, 'Executor should not be called for unsafe actions');
+    assert.strictEqual(result.execution?.success, false, 'Execution should report failure for unsafe actions');
+    assert.ok(Array.isArray(result.execution?.issues), 'Execution issues should be returned');
+    assert.ok(result.execution.issues.some((issue) => issue.includes('outside sandbox') || issue.includes('parent directory traversal')));
+  });
 });

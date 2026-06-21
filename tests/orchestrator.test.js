@@ -78,4 +78,89 @@ describe('Deterministic Orchestrator Pipeline', () => {
     assert.strictEqual(result.actions[0].path, 'generated_code.txt');
     assert.strictEqual(result.generatedCode, 'console.log("fallback");');
   });
+
+  it('should not execute actions when executeActions is false', async () => {
+    let executorCalled = false;
+    const result = await orchestrate({
+      taskDescription: 'Create example file',
+      projectRoot,
+      executeActions: false,
+      runCoderFn: async () => ({
+        role: 'coder',
+        selectedModel: 'qwen2.5-coder:1.5b',
+        task: 'Create example file',
+        contextSize: 0,
+        status: 'success',
+        generatedCode: 'console.log("hi");',
+        actions: [
+          { type: 'create_file', path: 'example.txt', content: 'hi' }
+        ]
+      }),
+      executorFn: async () => {
+        executorCalled = true;
+        return { results: [] };
+      }
+    });
+
+    assert.strictEqual(executorCalled, false, 'Executor should not be called when executeActions is false');
+    assert.strictEqual(result.actions.length, 1, 'Actions should still be returned');
+    assert.strictEqual(result.execution, undefined, 'Execution result should not be present');
+  });
+
+  it('should execute validated actions when executeActions is true', async () => {
+    let receivedActions = null;
+    const executionResponse = { createdFiles: ['example.txt'], failed: [] };
+
+    const result = await orchestrate({
+      taskDescription: 'Create example file',
+      projectRoot,
+      executeActions: true,
+      runCoderFn: async () => ({
+        role: 'coder',
+        selectedModel: 'qwen2.5-coder:1.5b',
+        task: 'Create example file',
+        contextSize: 0,
+        status: 'success',
+        generatedCode: 'console.log("hi");',
+        actions: [
+          { type: 'create_file', path: 'example.txt', content: 'hi' }
+        ]
+      }),
+      executorFn: async (actions) => {
+        receivedActions = actions;
+        return executionResponse;
+      }
+    });
+
+    assert.strictEqual(Array.isArray(receivedActions), true, 'Executor should receive an actions array');
+    assert.strictEqual(receivedActions.length, 1, 'Executor should receive the validated actions');
+    assert.strictEqual(result.execution?.success, true, 'Execution should report success');
+    assert.strictEqual(result.execution?.results, executionResponse, 'Execution results should be returned');
+  });
+
+  it('should not execute when actions are invalid even if executeActions is true', async () => {
+    let executorCalled = false;
+
+    const result = await orchestrate({
+      taskDescription: 'Write fallback file',
+      projectRoot,
+      executeActions: true,
+      runCoderFn: async () => ({
+        role: 'coder',
+        selectedModel: 'qwen2.5-coder:1.5b',
+        task: 'Write fallback file',
+        contextSize: 0,
+        status: 'success',
+        generatedCode: 'console.log("fallback");',
+        actions: []
+      }),
+      executorFn: async () => {
+        executorCalled = true;
+        return { createdFiles: [], failed: [] };
+      }
+    });
+
+    assert.strictEqual(executorCalled, false, 'Executor should not be called when actions are invalid');
+    assert.strictEqual(result.execution, undefined, 'Execution result should not be present for invalid actions');
+  });
 });

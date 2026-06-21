@@ -4,6 +4,7 @@ import { reduceTaskContext } from './task-reducer.js';
 import { runCoder } from './coder-wrapper.js';
 import { validateActions, validateGeneratedCode } from './validator.js';
 import { getRoleForIntent } from './local-model-router.js';
+import { executePlan } from './executor.js';
 
 const FALLBACK_FILE_NAME = 'generated_code.txt';
 
@@ -43,7 +44,13 @@ function extractActions(coderResult) {
  * @param {string} [params.projectRoot=process.cwd()]
  * @returns {Object} deterministic orchestration result
  */
-export async function orchestrate({ taskDescription, projectRoot = process.cwd(), runCoderFn = runCoder } = {}) {
+export async function orchestrate({
+  taskDescription,
+  projectRoot = process.cwd(),
+  runCoderFn = runCoder,
+  executeActions = false,
+  executorFn = executePlan
+} = {}) {
   if (typeof taskDescription !== 'string') {
     throw new TypeError('taskDescription must be a string');
   }
@@ -78,6 +85,15 @@ export async function orchestrate({ taskDescription, projectRoot = process.cwd()
   const fallbackActions = buildFallbackActions(coderResult?.generatedCode);
   const effectiveActions = actionValidation.valid ? actions : fallbackActions;
 
+  let execution;
+  if (executeActions && validation.valid && actionValidation.valid) {
+    const executionResult = await executorFn(effectiveActions, projectContext);
+    execution = {
+      success: Array.isArray(executionResult.failed) ? executionResult.failed.length === 0 : true,
+      results: executionResult
+    };
+  }
+
   // 6) Return deterministic orchestration result (nested as requested)
   return {
     planner: {
@@ -90,6 +106,7 @@ export async function orchestrate({ taskDescription, projectRoot = process.cwd()
     actions: effectiveActions,
     generatedCode: coderResult?.generatedCode ?? null,
     status,
+    execution,
     task: taskDescription,
     intent: {
       name: intent,

@@ -14,6 +14,7 @@ function extractBalancedJson(text, start) {
   const closing = opening === '{' ? '}' : ']';
   let depth = 0;
   let inString = false;
+  let stringDelimiter = null;
   let escape = false;
 
   for (let index = start; index < text.length; index += 1) {
@@ -28,14 +29,16 @@ function extractBalancedJson(text, start) {
         escape = true;
         continue;
       }
-      if (char === '"') {
+      if (char === stringDelimiter) {
         inString = false;
+        stringDelimiter = null;
       }
       continue;
     }
 
-    if (char === '"') {
+    if (char === '"' || char === "'" || char === '`') {
       inString = true;
+      stringDelimiter = char;
       continue;
     }
 

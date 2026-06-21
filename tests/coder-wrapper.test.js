@@ -63,4 +63,22 @@ describe('Coder wrapper and generated code validation', () => {
       }
     ]);
   });
+
+  it('should extract actions when the model returns malformed JSON with generatedCode template literals', () => {
+    const output = '{\n      "actions": [\n            {\n                      "type": "create_folder",\n                            "path": "src"\n            },\n                {\n                          "type": "create_file",\n                                "path": "src/App.js",\n                                      "content": "..."\n                }\n      ],\n        "generatedCode": `\n        const React = require(\'react\');\n        ...\n        `\n}\n';
+
+    const actions = extractActionsFromOutput(output);
+    assert.strictEqual(actions.length > 0, true);
+    assert.deepStrictEqual(actions, [
+      {
+        type: 'create_folder',
+        path: 'src'
+      },
+      {
+        type: 'create_file',
+        path: 'src/App.js',
+        content: '...'
+      }
+    ]);
+  });
 });

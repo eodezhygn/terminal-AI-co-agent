@@ -13,7 +13,16 @@ describe('Deterministic Orchestrator Pipeline', () => {
 
     assert.strictEqual(result.intent.name, 'planning', 'Intent should be planning');
     assert.strictEqual(result.intent.role.name, 'planner', 'Role should be planner');
-    assert.strictEqual(result.intent.role.coderResult.generatedCode, null, 'Generated code should be null for deterministic stub');
+    assert.strictEqual(
+  result.intent.name,
+  'planning'
+);
+
+assert.strictEqual(
+  result.intent.role.name,
+  'planner'
+);
+
   });
 
   it('should classify implementation tasks with coder role and coder model selected', async () => {

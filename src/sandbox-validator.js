@@ -1,6 +1,19 @@
 import path from 'path';
 
-const BLOCKED_SEGMENTS = new Set(['.git', '.env', 'node_modules']);
+const BLOCKED_SEGMENTS = new Set([
+  '.git',
+  '.env',
+  '.env.local',
+  '.env.production',
+  '.env.development',
+  'node_modules'
+]);
+
+const BLOCKED_FILES = new Set([
+  'package-lock.json',
+  'pnpm-lock.yaml',
+  'yarn.lock'
+]);
 const ABSOLUTE_PATH_PATTERN = /^(?:[A-Za-z]:[\\/]|\\|\/)/;
 const HOME_PATH_PATTERN = /(^|[\\/])~($|[\\/])/;
 
@@ -32,6 +45,12 @@ export function validateSandboxPath(filePath, { projectRoot = process.cwd() } = 
 
   const cleanPath = path.posix.normalize(normalizedPath);
   const segments = cleanPath.split('/').filter(Boolean);
+
+  if (BLOCKED_FILES.has(path.posix.basename(cleanPath))) {
+  issues.push(
+    `Path '${filePath}' references a protected file.`
+  );
+}
 
   if (segments.some((segment) => BLOCKED_SEGMENTS.has(segment))) {
     issues.push(`Path '${filePath}' references a blocked sandbox location.`);

@@ -1,5 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
+import { validateSandboxPath }  from '../sandbox-validator.js';
 
 /**
  * @typedef {Object} Action
@@ -48,6 +49,21 @@ function validateActionPath(action) {
   return null;
 }
 
+function validateProtectedPath(action) {
+  const result = validateSandboxPath(action.path);
+
+  if (!result.valid) {
+    return {
+      action: action.type,
+      path: action.path,
+      success: false,
+      error: result.issues.join('; ')
+    };
+  }
+
+  return null;
+}
+
 /**
  * @param {Action} action
  * @param {boolean} dryRun
@@ -63,6 +79,13 @@ async function executeAction(action, dryRun) {
   if (validationError) {
     return validationError;
   }
+
+  const sandboxError =
+  validateProtectedPath(action);
+
+if (sandboxError) {
+  return sandboxError;
+}
 
   const resolvedPath = resolvePath(action.path);
 

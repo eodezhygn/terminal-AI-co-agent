@@ -95,6 +95,58 @@ async function runTests() {
   assert.strictEqual(invalidResult.results[0].success, false);
   assert.ok(invalidResult.results[0].error.includes('Unsupported action type'));
 
+const blockedEnv = await executeActions([
+  {
+    type: 'create_file',
+    path: '.env',
+    content: 'SECRET=123'
+  }
+]);
+
+assert.strictEqual(blockedEnv.success, false);
+assert.strictEqual(
+  blockedEnv.results[0].success,
+  false
+);
+
+const blockedGit = await executeActions([
+  {
+    type: 'create_file',
+    path: '.git/config',
+    content: 'bad'
+  }
+]);
+
+assert.strictEqual(blockedGit.success, false);
+
+const blockedTraversal =
+  await executeActions([
+    {
+      type: 'create_file',
+      path: '../outside.txt',
+      content: 'bad'
+    }
+  ]);
+
+assert.strictEqual(
+  blockedTraversal.success,
+  false
+);
+
+const blockedNodeModules =
+  await executeActions([
+    {
+      type: 'create_file',
+      path: 'node_modules/test.js',
+      content: 'bad'
+    }
+  ]);
+
+assert.strictEqual(
+  blockedNodeModules.success,
+  false
+);
+
   await cleanup();
   console.log('Action executor tests passed.');
 }

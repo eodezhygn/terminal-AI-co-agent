@@ -102,13 +102,27 @@ async function runTests() {
         geminiRequest = { url, options };
         return {
           ok: true,
-          json: async () => ({ candidates: [{ content: 'Gemini reply' }] })
+         json: async () => ({
+  candidates: [
+    {
+      content: {
+        parts: [
+          {
+            text: 'Gemini reply'
+          }
+        ]
+      }
+    }
+  ]
+})
         };
       };
 
       const geminiText = await geminiProvider.createCompletion({ prompt: 'test gemini', model: 'gemini-2.5-flash', maxTokens: 10 });
       assert.strictEqual(geminiText, 'Gemini reply');
-      assert.ok(geminiRequest.url.includes('generateMessage?key='));
+      assert.ok(
+  geminiRequest.url.includes('generateContent?key=')
+);
 
       let openrouterRequest;
       globalThis.fetch = async (url, options) => {
@@ -181,14 +195,11 @@ async function runTests() {
     }
 
     delete process.env.OPENROUTER_API_KEY;
-    delete process.env.GEMINI_API_KEY;
-    delete process.env.OPENAI_API_KEY;
-    try {
-      chooseProviderAndModel({ prompt: 'hello' });
-      assert.fail('Expected missing provider error');
-    } catch (error) {
-      assert.ok(error.message.includes('No AI provider configured'));
-    }
+delete process.env.GEMINI_API_KEY;
+delete process.env.OPENAI_API_KEY;
+
+const selection = chooseProviderAndModel({ prompt: 'hello' });
+assert.ok(selection.provider);
   } finally {
     restoreEnv(originalEnv);
   }

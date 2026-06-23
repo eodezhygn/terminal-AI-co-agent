@@ -185,7 +185,19 @@ export async function generateCompletion({ model, prompt }) {
 
 export default {
   name: 'ollama',
+
   isAvailable: isOllamaAvailable,
+
+  getDefaultModel() {
+    return (
+      process.env.AI_MODEL ||
+      process.env.DEFAULT_MODEL ||
+      process.env.OLLAMA_MODEL ||
+      'qwen2.5:0.5b'
+    );
+  },
+
   listModels,
+
   generateCompletion
 };

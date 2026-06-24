@@ -1,4 +1,5 @@
 import path from 'path';
+import { validateProjectPath } from './path-safety.js';
 
 const BLOCKED_SEGMENTS = new Set([
   '.git',
@@ -33,13 +34,9 @@ export function validateSandboxPath(filePath, { projectRoot = process.cwd() } = 
     issues.push(`Path '${filePath}' references a home directory and is not allowed.`);
   }
 
-  const isAbsolute = ABSOLUTE_PATH_PATTERN.test(normalizedPath);
-  const normalizedRoot = path.resolve(projectRoot);
-  const resolvedPath = isAbsolute
-    ? path.resolve(normalizedPath)
-    : path.resolve(normalizedRoot, normalizedPath);
-
-  if (!resolvedPath.startsWith(normalizedRoot + path.sep) && resolvedPath !== normalizedRoot) {
+  try {
+    validateProjectPath(projectRoot, normalizedPath);
+  } catch (error) {
     issues.push(`Path '${filePath}' is outside sandbox.`);
   }
 

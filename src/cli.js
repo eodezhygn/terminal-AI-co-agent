@@ -1,7 +1,5 @@
 #!/usr/bin/env node
-import {
-  analyzeProject
-} from './project-analyzer.js';
+import {  analyzeProject } from './project-analyzer.js';
 import 'dotenv/config';
 import { readFile, writeFile, createFolder } from './fs.js';
 import { execShell } from './terminal.js';
@@ -15,6 +13,7 @@ import { SimpleAgent } from './agents/simpleAgent.js';
 import { embedText, getEmbeddingProvider } from './embeddings.js';
 import { formatApprovalPlan, promptApproval, formatTerminalApprovalPlan, promptTerminalApproval } from './approval.js';
 import { executePlan, executeTerminalActions } from './executor.js';
+import { executeActions } from './executor/action-executor.js';
 
 function usage() {
   console.log(`
@@ -231,7 +230,7 @@ async function main() {
         const projectContext = await analyzeProject(  process.cwd() );
 
 const executionPlan = planner.createExecutionPlan( task, projectContext );
-        const filesystemResult = await executePlan(executionPlan, projectContext);
+        const filesystemResult =  await executeActions(executionPlan, {    dryRun: false  });
 
         // Phase 3: Check for terminal actions
         const terminalActions = approvalPlan.terminalActions || [];
@@ -255,16 +254,24 @@ const executionPlan = planner.createExecutionPlan( task, projectContext );
         console.log('═══════════════════════════════\n');
 
         console.log('Filesystem operations:');
-        console.log(`  Created: ${filesystemResult.createdFiles.length}`);
-        console.log(`  Edited: ${filesystemResult.editedFiles.length}`);
-        console.log(`  Skipped: ${filesystemResult.skipped.length}`);
-        console.log(`  Failed: ${filesystemResult.failed.length}`);
+
+const successfulActions =
+  filesystemResult.results.filter(r => r.success);
+
+const failedActions =
+  filesystemResult.results.filter(r => !r.success);
+
+console.log(`  Success: ${filesystemResult.success}`);
+console.log(`  Actions: ${filesystemResult.results.length}`);
+console.log(`  Successful: ${successfulActions.length}`);
+console.log(`  Failed: ${failedActions.length}`);
+
 
         console.log('\nTerminal commands:');
         console.log(`  Executed: ${terminalResult.executed.length}`);
         console.log(`  Failed: ${terminalResult.failed.length}`);
         console.log(`  Skipped: ${terminalResult.skipped.length}`);
-
+/*
         if (filesystemResult.createdFiles.length > 0) {
           console.log('\nCreated files:');
           filesystemResult.createdFiles.forEach((file) => console.log(`  - ${file}`));
@@ -286,7 +293,7 @@ const executionPlan = planner.createExecutionPlan( task, projectContext );
             console.log(`  - ${action.path || action.type}: ${error}`);
           });
         }
-
+*/
         if (terminalResult.executed.length > 0) {
           console.log('\nExecuted commands:');
           terminalResult.executed.forEach(({ command }) => console.log(`  - ${command}`));

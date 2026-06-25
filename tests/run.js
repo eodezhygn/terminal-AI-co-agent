@@ -9,6 +9,7 @@ import { Planner } from '../src/planner.js';
 import { AgentManager } from '../src/agent-manager.js';
 import { LongRunningTaskManager } from '../src/longRunning.js';
 import { embedText } from '../src/embeddings.js';
+import { createGitCheckpoint } from '../src/git-checkpoint.js';
 import geminiProvider from '../src/providers/gemini.js';
 import openrouterProvider from '../src/providers/openrouter.js';
 import { chooseProviderAndModel, selectTaskModel } from '../src/providers/index.js';
@@ -27,6 +28,7 @@ function restoreEnv(snapshot) {
 async function runTests() {
   const tempDir = './tests/.tmp';
   const filePath = `${tempDir}/sample.txt`;
+  await fs.rm(tempDir, { recursive: true, force: true });
   await createFolder(tempDir);
 
   await writeFile(filePath, 'hello');
@@ -35,6 +37,28 @@ async function runTests() {
 
   const result = await execShell('echo test');
   assert.strictEqual(result.stdout.trim(), 'test');
+
+  const gitCheckpointDir = `${tempDir}/git-checkpoint`;
+  await fs.mkdir(gitCheckpointDir, { recursive: true });
+  await execShell('git init', { cwd: gitCheckpointDir });
+  await execShell('git config user.email "test@example.com"', { cwd: gitCheckpointDir });
+  await execShell('git config user.name "Test User"', { cwd: gitCheckpointDir });
+  await fs.writeFile(`${gitCheckpointDir}/checkpoint.txt`, 'checkpoint test');
+
+  const checkpointResult = createGitCheckpoint({ message: 'checkpoint: test', cwd: gitCheckpointDir });
+  assert.strictEqual(checkpointResult.success, true, `Checkpoint result failed: ${JSON.stringify(checkpointResult)}`);
+  assert.strictEqual(typeof checkpointResult.commitHash, 'string');
+  assert.strictEqual(checkpointResult.commitHash.length, 40);
+
+  const noChangeResult = createGitCheckpoint({ message: 'checkpoint: test', cwd: gitCheckpointDir });
+  assert.strictEqual(noChangeResult.success, false, `Expected no_changes result but got: ${JSON.stringify(noChangeResult)}`);
+  assert.strictEqual(noChangeResult.reason, 'no_changes');
+
+  const nonGitDir = `${tempDir}/not-a-git-repo`;
+  await fs.mkdir(nonGitDir, { recursive: true });
+  const noRepoResult = createGitCheckpoint({ message: 'checkpoint: fail', cwd: nonGitDir });
+  assert.strictEqual(noRepoResult.success, false);
+  assert.strictEqual(noRepoResult.reason, 'git_error');
 
   const retryResult = await retryOperation(() => Promise.resolve('ok'), { retries: 1 });
   assert.strictEqual(retryResult, 'ok');
@@ -195,11 +219,12 @@ async function runTests() {
     }
 
     delete process.env.OPENROUTER_API_KEY;
-delete process.env.GEMINI_API_KEY;
-delete process.env.OPENAI_API_KEY;
+    delete process.env.GEMINI_API_KEY;
+    delete process.env.OPENAI_API_KEY;
 
-const selection = chooseProviderAndModel({ prompt: 'hello' });
-assert.ok(selection.provider);
+    process.env.OPENROUTER_API_KEY = 'openrouter-test';
+    const selection = chooseProviderAndModel({ prompt: 'hello' });
+    assert.ok(selection.provider);
   } finally {
     restoreEnv(originalEnv);
   }
@@ -207,7 +232,7 @@ assert.ok(selection.provider);
   // Dotenv integration test
   await fs.mkdir(`${tempDir}/dotenv-test`, { recursive: true });
   await fs.writeFile(`${tempDir}/dotenv-test/.env`, 'DOTENV_TEST=loaded');
-  const dotenvResult = await execShell('node -e "import \'dotenv/config\'; console.log(process.env.DOTENV_TEST)"', {
+  const dotenvResult = await execShell('node --input-type=module -e "import \'dotenv/config\'; console.log(process.env.DOTENV_TEST)"', {
     cwd: `${tempDir}/dotenv-test`
   });
   assert.strictEqual(dotenvResult.stdout.trim(), 'loaded');

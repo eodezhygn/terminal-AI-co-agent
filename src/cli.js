@@ -14,6 +14,7 @@ import { embedText, getEmbeddingProvider } from './embeddings.js';
 import { formatApprovalPlan, promptApproval, formatTerminalApprovalPlan, promptTerminalApproval } from './approval.js';
 import { executePlan, executeTerminalActions } from './executor.js';
 import { executeActions } from './executor/action-executor.js';
+import { createGitCheckpoint } from './git-checkpoint.js';
 
 function usage() {
   console.log(`
@@ -225,12 +226,19 @@ async function main() {
         }
 
         console.log('\nFilesystem execution approved.');
+
+        const checkpointResult = createGitCheckpoint({ message: `checkpoint: ${task}` });
+        if (checkpointResult.success) {
+          console.log(`Git checkpoint created: ${checkpointResult.commitHash}`);
+        } else if (checkpointResult.reason === 'git_error') {
+          console.warn(`Warning: Git checkpoint failed: ${checkpointResult.error}`);
+        }
         
         // Phase 2: Execute filesystem actions
-        const projectContext = await analyzeProject(  process.cwd() );
+        const projectContext = await analyzeProject(process.cwd());
 
-const executionPlan = planner.createExecutionPlan( task, projectContext );
-        const filesystemResult =  await executeActions(executionPlan, {    dryRun: false  });
+        const executionPlan = planner.createExecutionPlan(task, projectContext);
+        const filesystemResult = await executeActions(executionPlan, { dryRun: false });
 
         // Phase 3: Check for terminal actions
         const terminalActions = approvalPlan.terminalActions || [];

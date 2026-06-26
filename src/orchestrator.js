@@ -1,5 +1,5 @@
 import { Planner } from './planner.js';
-import { extractProjectContext } from './context-extractor.js';
+import { extractProjectContext } from './context/index.js';
 import { reduceTaskContext } from './task-reducer.js';
 import { runCoder } from './coder-wrapper.js';
 import { validateActions, validateGeneratedCode } from './validator.js';

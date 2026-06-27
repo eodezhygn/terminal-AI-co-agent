@@ -241,6 +241,7 @@ async function runTests() {
   assert.ok(Array.isArray(embedding));
 
   await fs.rm(tempDir, { recursive: true, force: true });
+  await import("./patch-engine.test.js");
   console.log('All tests passed.');
 }
 
